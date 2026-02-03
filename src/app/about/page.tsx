@@ -1,7 +1,33 @@
+"use client"
+
+import * as React from "react"
 import { Button } from "@/components/ui/Button"
 import { Instagram } from "lucide-react"
 
 export default function AboutPage() {
+    const [profileImage, setProfileImage] = React.useState<string | null>(null)
+    const [isLoading, setIsLoading] = React.useState(true)
+
+    React.useEffect(() => {
+        fetch('/api/profile')
+            .then(res => res.json())
+            .then(data => {
+                if (data.profileImage) {
+                    setProfileImage(data.profileImage)
+                }
+            })
+            .catch(err => {
+                console.error("Failed to fetch profile:", err)
+            })
+            .finally(() => {
+                setIsLoading(false)
+            })
+    }, [])
+
+    // Default fallback image
+    const defaultImage = "https://images.unsplash.com/photo-1554048612-387768052bf7?q=80&w=1000&auto=format&fit=crop"
+    const displayImage = profileImage || defaultImage
+
     return (
         <div className="min-h-screen bg-black text-white py-20 px-4 sm:px-6 lg:px-8">
             <div className="max-w-4xl mx-auto">
@@ -9,11 +35,17 @@ export default function AboutPage() {
                     {/* Profile Image */}
                     <div className="w-full md:w-1/2">
                         <div className="relative aspect-[3/4] w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
-                            <img
-                                src="https://images.unsplash.com/photo-1554048612-387768052bf7?q=80&w=1000&auto=format&fit=crop"
-                                alt="Photographer Profile"
-                                className="object-cover w-full h-full hover:scale-105 transition-transform duration-700"
-                            />
+                            {isLoading ? (
+                                <div className="w-full h-full bg-white/5 animate-pulse flex items-center justify-center">
+                                    <span className="text-gray-500">Loading...</span>
+                                </div>
+                            ) : (
+                                <img
+                                    src={displayImage}
+                                    alt="Photographer Profile"
+                                    className="object-cover w-full h-full hover:scale-105 transition-transform duration-700"
+                                />
+                            )}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         </div>
                     </div>

@@ -80,10 +80,28 @@ export default function AdminDashboard() {
     const [uploadUrl, setUploadUrl] = React.useState("")
     const [category, setCategory] = React.useState("Portrait")
     const fileInputRef = React.useRef<HTMLInputElement>(null)
+    
+    // Profile picture state
+    const [profileImage, setProfileImage] = React.useState("")
+    const [isUploadingProfile, setIsUploadingProfile] = React.useState(false)
+    const profileFileInputRef = React.useRef<HTMLInputElement>(null)
 
     React.useEffect(() => {
         fetchMessages()
+        fetchProfile()
     }, [])
+    
+    const fetchProfile = async () => {
+        try {
+            const res = await fetch('/api/profile')
+            const data = await res.json()
+            if (data.profileImage) {
+                setProfileImage(data.profileImage)
+            }
+        } catch (error) {
+            console.error("Failed to fetch profile")
+        }
+    }
 
     const fetchMessages = async () => {
         try {
@@ -140,6 +158,60 @@ export default function AdminDashboard() {
             }
             reader.onerror = reject
         })
+    }
+
+    const handleProfileUpload = async (e: React.FormEvent) => {
+        e.preventDefault()
+        
+        if (!profileImage) {
+            alert("Please select a profile picture first")
+            return
+        }
+
+        // Check if base64 string is too large
+        const base64Size = (profileImage.length * 3) / 4
+        const maxSize = 3.5 * 1024 * 1024 // 3.5MB
+        
+        if (base64Size > maxSize) {
+            const sizeMB = (base64Size / (1024 * 1024)).toFixed(2)
+            if (!confirm(`The file is quite large (${sizeMB}MB). This may fail to upload. Try compressing the image first. Continue anyway?`)) {
+                return
+            }
+        }
+
+        setIsUploadingProfile(true)
+
+        try {
+            const res = await fetch('/api/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileImage }),
+            })
+
+            const contentType = res.headers.get('content-type')
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await res.text()
+                console.error("Non-JSON response:", text.substring(0, 200))
+                alert(`Failed to upload profile picture: Server returned non-JSON response. Status: ${res.status}`)
+                setIsUploadingProfile(false)
+                return
+            }
+
+            const data = await res.json()
+
+            if (res.ok && data.success) {
+                alert("Profile picture updated successfully!")
+            } else {
+                const errorMsg = data.error || data.details || "Failed to upload profile picture"
+                console.error("Upload error:", data)
+                alert(`Failed to upload profile picture: ${errorMsg}`)
+            }
+        } catch (error) {
+            console.error("Upload error:", error)
+            alert(`Error uploading profile picture: ${error instanceof Error ? error.message : "Unknown error"}`)
+        } finally {
+            setIsUploadingProfile(false)
+        }
     }
 
     const handleLogout = async () => {
@@ -222,6 +294,78 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    {/* Profile Picture Section */}
+                    <Card className="bg-white/5 border-white/10">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <ImageIcon className="w-5 h-5 text-gold" />
+                                Profile Picture
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleProfileUpload} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-300">Profile Image</label>
+                                    <div
+                                        className="border-2 border-dashed border-white/20 rounded-lg p-8 text-center hover:border-gold/50 transition-colors cursor-pointer bg-white/5"
+                                        onClick={() => profileFileInputRef.current?.click()}
+                                    >
+                                        <input
+                                            type="file"
+                                            ref={profileFileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0]
+                                                if (file) {
+                                                    // Compress image before converting to base64
+                                                    try {
+                                                        const compressed = await compressImage(file, 1200, 1200, 0.85)
+                                                        setProfileImage(compressed)
+                                                    } catch (error) {
+                                                        console.error("Compression error:", error)
+                                                        // Fallback to original if compression fails
+                                                        const reader = new FileReader()
+                                                        reader.onloadend = () => {
+                                                            setProfileImage(reader.result as string)
+                                                        }
+                                                        reader.readAsDataURL(file)
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                        <p className="text-sm text-gray-400">
+                                            {profileImage ? "Profile image selected" : "Click to upload profile picture"}
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-1">JPG, PNG (Recommended: Square or Portrait)</p>
+                                    </div>
+                                    {profileImage && (
+                                        <div className="mt-2 relative w-full aspect-[3/4] max-w-xs mx-auto rounded-lg overflow-hidden bg-black">
+                                            <img src={profileImage} alt="Profile Preview" className="w-full h-full object-cover" />
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setProfileImage("")
+                                                    if (profileFileInputRef.current) profileFileInputRef.current.value = ""
+                                                }}
+                                                className="absolute top-1 right-1 bg-black/50 p-1 rounded-full hover:bg-red-500/80 transition-colors z-10"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-white" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Button type="submit" className="w-full" isLoading={isUploadingProfile} disabled={!profileImage}>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Update Profile Picture
+                                </Button>
+                            </form>
+                        </CardContent>
+                    </Card>
+
                     {/* Upload Section */}
                     <Card className="bg-white/5 border-white/10">
                         <CardHeader>
