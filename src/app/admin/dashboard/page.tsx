@@ -102,6 +102,12 @@ export default function AdminDashboard() {
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault()
+        
+        if (!uploadUrl) {
+            alert("Please select a media file first")
+            return
+        }
+
         setIsUploading(true)
 
         try {
@@ -115,17 +121,22 @@ export default function AdminDashboard() {
                 }),
             })
 
-            if (res.ok) {
+            const data = await res.json()
+
+            if (res.ok && data.success) {
                 alert("Media uploaded successfully!")
                 setUploadUrl("")
-                // Ideally trigger a refresh of the media list here, but for now a page reload works or we can lift state up.
-                // For simplicity in this step, we'll just alert.
+                if (fileInputRef.current) fileInputRef.current.value = ""
+                // Refresh the page to show the new media
                 window.location.reload()
             } else {
-                alert("Failed to upload media")
+                const errorMsg = data.error || data.details || "Failed to upload media"
+                console.error("Upload error:", data)
+                alert(`Failed to upload media: ${errorMsg}`)
             }
         } catch (error) {
-            alert("Error uploading media")
+            console.error("Upload error:", error)
+            alert(`Error uploading media: ${error instanceof Error ? error.message : "Unknown error"}`)
         } finally {
             setIsUploading(false)
         }

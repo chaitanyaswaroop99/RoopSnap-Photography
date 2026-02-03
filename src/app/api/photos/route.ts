@@ -33,13 +33,17 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type");
+    console.log("Upload request - Content-Type:", contentType);
     
     // Handle JSON upload (from admin dashboard with base64 data URL)
     if (contentType?.includes("application/json")) {
       const body = await req.json();
       const { url, category, created_at } = body;
 
+      console.log("JSON upload - URL length:", url?.length, "Category:", category);
+
       if (!url) {
+        console.error("No URL provided in request");
         return NextResponse.json({ error: "No URL provided" }, { status: 400 });
       }
 
@@ -69,18 +73,43 @@ export async function POST(req: Request) {
         }
       }
 
-      // Fall back to local file storage
-      const photos = getPhotos();
-      const newPhoto = {
-        id: photos.length > 0 ? Math.max(...photos.map((p: any) => p.id || 0)) + 1 : 1,
-        url,
-        category: category || "Portrait",
-        created_at: created_at || new Date().toISOString()
-      };
-      photos.push(newPhoto);
-      savePhotos(photos);
+      // Fall back to local file storage (only works in development, not on Vercel)
+      try {
+        const photos = getPhotos();
+        const newPhoto = {
+          id: photos.length > 0 ? Math.max(...photos.map((p: any) => p.id || 0)) + 1 : 1,
+          url,
+          category: category || "Portrait",
+          created_at: created_at || new Date().toISOString()
+        };
+        photos.push(newPhoto);
+        const saved = savePhotos(photos);
+        
+        if (!saved) {
+          console.error("Failed to save photos to local storage - this is expected on Vercel");
+          // On Vercel, file system is read-only, so we need Supabase
+          if (!supabaseUrl || !supabaseKey) {
+            return NextResponse.json({ 
+              error: "File storage not available. Please configure Supabase for production deployment.",
+              details: "Vercel's file system is read-only. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables."
+            }, { status: 500 });
+          }
+          return NextResponse.json({ error: "Failed to save photo" }, { status: 500 });
+        }
 
-      return NextResponse.json({ success: true, data: newPhoto });
+        console.log("Photo saved successfully, ID:", newPhoto.id);
+        return NextResponse.json({ success: true, data: newPhoto });
+      } catch (storageError) {
+        console.error("Storage error:", storageError);
+        // If we're on Vercel and Supabase isn't configured, give helpful error
+        if (!supabaseUrl || !supabaseKey) {
+          return NextResponse.json({ 
+            error: "Storage not configured for production",
+            details: "Please configure Supabase environment variables in Vercel project settings."
+          }, { status: 500 });
+        }
+        return NextResponse.json({ error: "Storage error", details: storageError instanceof Error ? storageError.message : "Unknown" }, { status: 500 });
+      }
     }
 
     // Handle FormData upload (file upload)
