@@ -95,6 +95,53 @@ export default function AdminDashboard() {
         }
     }
 
+    // Image compression function
+    const compressImage = (file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.8): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(file)
+            reader.onload = (e) => {
+                const img = new Image()
+                img.src = e.target?.result as string
+                img.onload = () => {
+                    const canvas = document.createElement('canvas')
+                    let width = img.width
+                    let height = img.height
+
+                    // Calculate new dimensions
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width
+                            width = maxWidth
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = (width * maxHeight) / height
+                            height = maxHeight
+                        }
+                    }
+
+                    canvas.width = width
+                    canvas.height = height
+
+                    const ctx = canvas.getContext('2d')
+                    if (!ctx) {
+                        reject(new Error('Could not get canvas context'))
+                        return
+                    }
+
+                    ctx.drawImage(img, 0, 0, width, height)
+                    
+                    // Convert to base64 with compression
+                    const compressed = canvas.toDataURL(file.type, quality)
+                    resolve(compressed)
+                }
+                img.onerror = reject
+            }
+            reader.onerror = reject
+        })
+    }
+
     const handleLogout = async () => {
         document.cookie = "admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;"
         router.push("/admin")
@@ -106,6 +153,18 @@ export default function AdminDashboard() {
         if (!uploadUrl) {
             alert("Please select a media file first")
             return
+        }
+
+        // Check if base64 string is too large (Vercel limit is ~4.5MB for request body)
+        // Base64 is ~33% larger than original, so we check for ~3.5MB base64 = ~2.6MB original
+        const base64Size = (uploadUrl.length * 3) / 4 // Approximate size in bytes
+        const maxSize = 3.5 * 1024 * 1024 // 3.5MB in bytes
+        
+        if (base64Size > maxSize) {
+            const sizeMB = (base64Size / (1024 * 1024)).toFixed(2)
+            if (!confirm(`The file is quite large (${sizeMB}MB). This may fail to upload. Try compressing the image first or use a smaller file. Continue anyway?`)) {
+                return
+            }
         }
 
         setIsUploading(true)
@@ -184,14 +243,32 @@ export default function AdminDashboard() {
                                             ref={fileInputRef}
                                             className="hidden"
                                             accept="image/*,video/*"
-                                            onChange={(e) => {
+                                            onChange={async (e) => {
                                                 const file = e.target.files?.[0]
                                                 if (file) {
-                                                    const reader = new FileReader()
-                                                    reader.onloadend = () => {
-                                                        setUploadUrl(reader.result as string)
+                                                    // For videos, just read as-is
+                                                    if (file.type.startsWith('video/')) {
+                                                        const reader = new FileReader()
+                                                        reader.onloadend = () => {
+                                                            setUploadUrl(reader.result as string)
+                                                        }
+                                                        reader.readAsDataURL(file)
+                                                        return
                                                     }
-                                                    reader.readAsDataURL(file)
+                                                    
+                                                    // For images, compress before converting to base64
+                                                    try {
+                                                        const compressed = await compressImage(file)
+                                                        setUploadUrl(compressed)
+                                                    } catch (error) {
+                                                        console.error("Compression error:", error)
+                                                        // Fallback to original if compression fails
+                                                        const reader = new FileReader()
+                                                        reader.onloadend = () => {
+                                                            setUploadUrl(reader.result as string)
+                                                        }
+                                                        reader.readAsDataURL(file)
+                                                    }
                                                 }
                                             }}
                                         />
