@@ -34,7 +34,13 @@ export async function getDb(): Promise<Db> {
   if (!clientPromise) {
     throw new Error('MongoDB URI not configured. Please set MONGODB_URI environment variable.')
   }
-  const client = await clientPromise
-  const dbName = process.env.MONGODB_DB_NAME || 'roopsnap'
-  return client.db(dbName)
+  
+  try {
+    const client = await clientPromise
+    const dbName = process.env.MONGODB_DB_NAME || 'roopsnap'
+    return client.db(dbName)
+  } catch (error) {
+    console.error("MongoDB connection error:", error)
+    throw new Error(`Failed to connect to MongoDB: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 }

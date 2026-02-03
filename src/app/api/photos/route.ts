@@ -76,9 +76,19 @@ export async function POST(req: Request) {
           return NextResponse.json({ success: true, data: savedPhoto });
         } catch (mongoError) {
           console.error("MongoDB error:", mongoError);
+          const errorMessage = mongoError instanceof Error ? mongoError.message : "Failed to save to MongoDB";
+          
+          // Check if it's a connection error
+          if (errorMessage.includes("connection") || errorMessage.includes("MongoServerError") || errorMessage.includes("MongoNetworkError")) {
+            return NextResponse.json({ 
+              error: "Database connection error",
+              details: "Unable to connect to MongoDB. Please check your MONGODB_URI environment variable."
+            }, { status: 500 });
+          }
+          
           return NextResponse.json({ 
             error: "Database error",
-            details: mongoError instanceof Error ? mongoError.message : "Failed to save to MongoDB"
+            details: errorMessage
           }, { status: 500 });
         }
       }
@@ -172,7 +182,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, data: newPhoto });
   } catch (err) {
     console.error("Upload error:", err);
-    return NextResponse.json({ error: "Server error", details: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
+    // Always return JSON, never HTML - this prevents the "Request Error" HTML page
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    const errorStack = err instanceof Error ? err.stack : String(err);
+    console.error("Full error:", errorStack);
+    
+    return NextResponse.json({ 
+      error: "Server error", 
+      details: errorMessage,
+      type: err instanceof Error ? err.constructor.name : typeof err
+    }, { status: 500 });
   }
 }
 

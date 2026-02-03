@@ -121,6 +121,15 @@ export default function AdminDashboard() {
                 }),
             })
 
+            // Check if response is JSON before parsing
+            const contentType = res.headers.get("content-type")
+            if (!contentType || !contentType.includes("application/json")) {
+                const text = await res.text()
+                console.error("Non-JSON response:", text.substring(0, 200))
+                alert(`Failed to upload media: Server returned non-JSON response. Status: ${res.status}`)
+                return
+            }
+
             const data = await res.json()
 
             if (res.ok && data.success) {
